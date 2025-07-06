@@ -13,6 +13,8 @@ import {
   GAME_SERVER_INSTANCE_READY_CHANNEL,
   ON_MATCH_MAKER_STARTED_CHANNEL,
   ON_MATCH_MAKER_STARTED_NOTIFICATION,
+  ON_BOT_ADDED_NOTIFICATION,
+  ON_BOT_ADDED,
   redisClient,
   redisGetPlayerPerk,
   RedisPlayerConfig,
@@ -260,6 +262,44 @@ export class WebSocketService {
       player.matchTick = undefined;
     }
   }
+
+  async botaddedtocustom(notification: ON_BOT_ADDED_NOTIFICATION) {
+    const client = this.clients.get(notification.playerid);
+    if (client) {
+    client.send({
+      "data": {
+        "TeamIndex": notification.teamindex,
+        "Bot": {
+          "Fighter": {
+            "AssetPath": notification.characterpath,
+            "Slug": notification.characterslug
+          },
+          "Account": {
+            "id": notification.botid
+          },
+          "AccountID": notification.botid,
+          "LobbyPlayerIndex": notification.playerindex,
+          "BotSettingSlug": "Medium",
+          "Skin": {
+            "AssetPath": notification.skinpath,
+            "Slug": notification.skinslug
+          }
+        },
+        "MatchID": notification.matchid,
+        "template_id": "BotAddedToCustomGame"
+      },
+      "payload": {
+        "match": {
+          "id": notification.matchid
+        },
+        "custom_notification": "realtime"
+      },
+      "header": "",
+      "cmd": "update"
+  })
+  }
+  console.log("botaddedtocustom")
+}
 
   async handlePartyQueued(notification: ON_MATCH_MAKER_STARTED_NOTIFICATION) {
     for (const player of notification.players) {
@@ -686,6 +726,15 @@ export class WebSocketService {
       const notification = JSON.parse(message) as RedisMatchEndNotification;
       this.handleOnMatchEnd(notification);
     });
+
+    this.redisSub.subscribe(ON_BOT_ADDED, (message) => {
+      const notification = JSON.parse(message) as ON_BOT_ADDED_NOTIFICATION;
+      this.botaddedtocustom(notification);
+      console.log("websocket notified of bot added");
+    });
+
+    
+
   }
 }
 

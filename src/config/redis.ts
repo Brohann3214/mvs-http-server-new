@@ -23,6 +23,7 @@ export const ON_LOBBY_MODE_UPDATED = "OnLobbyModeUpdated";
 export const ON_MATCH_MAKER_STARTED_CHANNEL = "party:queued";
 export const ON_CANCEL_MATCHMAKING = "matchmaking:cancel";
 export const ON_END_OF_MATCH = "match:end";
+export const ON_BOT_ADDED = "match:botadded";
 
 export type RedisClient = RedisClientType<redis.RedisModules, redis.RedisFunctions, redis.RedisScripts>;
 
@@ -104,6 +105,18 @@ export interface ON_MATCH_MAKER_STARTED_NOTIFICATION extends MVS_NOTIFICATION {
   matchmakingRequestId: string;
   matchType: MATCH_TYPES;
   partyLeaderId: string;
+}
+
+export interface ON_BOT_ADDED_NOTIFICATION extends MVS_NOTIFICATION {
+  teamindex: number;
+  matchid: string;
+  botid: string;
+  playerindex: number;
+  skinslug: string;
+  skinpath: string;
+  characterslug: string;
+  characterpath: string;
+  playerid: string
 }
 
 export interface MATCH_FOUND_NOTIFICATION extends MVS_NOTIFICATION {
@@ -236,6 +249,11 @@ export async function redisUpdatePlayerLoadout(playerId: string, redisPlayer: Re
 
 export async function redisUpdatePlayerStatus(playerId: string, status: string) {
   await redisClient.hSet(`player:${playerId}`, { status: status });
+}
+
+export async function redisAddBotToMatch(notification: ON_BOT_ADDED_NOTIFICATION) {
+  await redisClient.publish(ON_BOT_ADDED, JSON.stringify(notification))
+  console.log("redisAddBot")
 }
 
 export async function redisUpdatePlayerKey(playerId: string, key: string, value: string) {

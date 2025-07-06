@@ -1,8 +1,12 @@
 import express, { Request, Response } from "express";
 import { 
+    RedisPlayer,
+    redisUpdateMatch,
     redisUpdatePlayerLoadout,
-    redisAddBotToCustomGame,
-    BOT_ADDED_NOTIFICATION
+    redisClient,
+    ON_BOT_ADDED_NOTIFICATION,
+    redisAddBotToMatch,
+    redisGetMatch,
 } from "../config/redis";
 import env from "../env/env";
 import { PerkPagesModel } from "../database/PerkPages";
@@ -139,29 +143,49 @@ export async function add_custom_game_bot(req: Request, res: Response) {
     const body = req.body as Add_Custom_bot_REQ
     const account = req.token
     res.send({
-  "body": {
-    "MatchID": body.MatchID,
-    "Bot": {
-      "Account": {
-        "id": body.BotAccountID
-      },
-      "AccountID": body.BotAccountID,
-      "BotSettingSlug": body.BotSettingSlug,
-      "Fighter": {
-        "AssetPath": body.CharacterAssetPath,
-        "Slug": body.CharacterSlug
-      },
-      "Skin": {
-        "AssetPath": body.SkinAssetPath,
-        "Slug": body.SkinSlug
-      },
-      "LobbyPlayerIndex": 2
-    },
-    "TeamIndex": body.TeamIndex
-  },
-  "metadata": null,
-  "return_code": 0
-})
+        "body": {
+            "MatchID": body.MatchID,
+            "Bot": {
+            "Account": {
+                "id": body.BotAccountID
+            },
+            "AccountID": body.BotAccountID,
+            "BotSettingSlug": body.BotSettingSlug,
+            "Fighter": {
+                "AssetPath": body.CharacterAssetPath,
+                "Slug": body.CharacterSlug
+            },
+            "Skin": {
+                "AssetPath": body.SkinAssetPath,
+                "Slug": body.SkinSlug
+            },
+            "LobbyPlayerIndex": 2
+            },
+            "TeamIndex": body.TeamIndex
+        },
+        "metadata": null,
+        "return_code": 0
+
+    })
+
+    //redisUpdateMatch(body.MatchID,)
+
+    let data: ON_BOT_ADDED_NOTIFICATION = {
+    teamindex: body.TeamIndex,
+    matchid: body.MatchID,
+    botid: body.BotAccountID,
+    playerindex: 2,
+    skinslug: body.SkinSlug,
+    skinpath: body.SkinAssetPath,
+    characterslug: body.CharacterSlug,
+    characterpath: body.CharacterAssetPath,
+    playerid: account.id
+    }
+    redisAddBotToMatch(data)
+    //console.log("bot added", data)
+    let matchidk = await redisGetMatch(body.MatchID)
+    console.log(matchidk)
+
 }
 
 export async function search_profiles_by_username(req: Request, res: Response) {
@@ -649,12 +673,37 @@ export async function lobby_code(req:Request, res: Response) {
   
 }
 
+
+interface Lobby {
+  id: string;
+  created_at: string;
+  owner: string;
+  guest?: string;
+  mode: LOBBY_MODES;
+}
+
+
 export async function create_custom_game_lobby(req: Request, res: Response) {
   const accountid = new Types.ObjectId(req.token.id)
   const account = req.token.id
   let character = "" as any
   let variant = "" as any
+  let lobbyId = "67ba8ae5ada65997088e253f"
 
+    const newLobby: Lobby = {
+        id: "67ba8ae5ada65997088e253f",
+        created_at: new Date().toISOString(),
+        mode: LOBBY_MODES.ONE_V_ONE, // Default mode, can be changed later
+        owner: account,
+        // guest can be set later when a second player joins
+    };
+    await redisClient.hSet(`player:${account}:lobby:${lobbyId}`, {
+        id: newLobby.id,
+        created_at: newLobby.created_at,
+        mode: newLobby.mode,
+        owner: newLobby.owner,
+    });
+  console.log(`Creating custom lobby for ${account} - matchLobbyId:${lobbyId}`);
   try {
     const playerData = await PlayerTesterModel.findOne({ _id: new Types.ObjectId(account) });
     //let profileicon = ""
@@ -948,7 +997,7 @@ export async function create_custom_game_lobby(req: Request, res: Response) {
                 }
             ],
             "match_config": {
-                "TeamStyle": "Duos",
+                "TeamStyle": "Solos",
                 "QueueType": "Unselected",
                 "Context": "Custom",
                 "ModeDifficulty": "Unselected",
@@ -979,7 +1028,14 @@ export async function set_lock_lobby_loadout(req: Request, res: Response<Lock_Lo
   if (ip === "127.0.0.1") {
     ip = env.LOCAL_PUBLIC_IP;
   }
-  await redisUpdatePlayerLoadout(account.id, body.Loadout.Character, body.Loadout.Skin, ip);
+  let loadout = {
+    //status: string,
+    //profileIcon: string,
+    character: body.Loadout.Character,
+    skin: body.Loadout.Skin,
+    ip: ip
+  } as RedisPlayer
+  await redisUpdatePlayerLoadout(account.id, loadout);
   
   try {
     const updatedDoc = await PlayerTesterModel.findOneAndUpdate(
@@ -1088,7 +1144,7 @@ export async function handleSsc_invoke_create_party_lobby(req: Request<{}, {}, {
   const lobbyMode = LOBBY_MODES.ONE_V_ONE; // Default mode, can be changed later;
   const newLobby = await createLobby(account.id, lobbyMode);
 
-  await redisUpdatePlayerLoadout(account.id, loadout.Character, loadout.Skin, ip);
+  await redisUpdatePlayerLoadout(loadout.Character, loadout.Skin);
   res.send({
     body: {
       lobby: {
